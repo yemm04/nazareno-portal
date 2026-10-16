@@ -1,0 +1,78 @@
+package com.nazareno.portal.service;
+
+import com.nazareno.portal.model.Asistencia;
+import com.nazareno.portal.model.Usuario;
+import com.nazareno.portal.repository.AsistenciaRepository;
+import com.nazareno.portal.repository.UsuarioRepository;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.NoSuchElementException;
+
+@Service
+public class AsistenciaService {
+
+    private static final ZoneId ZONA_PERU = ZoneId.of("America/Lima");
+    private static final long DURACION_ASISTENCIA_HORAS = 4;
+
+    private final AsistenciaRepository asistenciaRepository;
+    private final UsuarioRepository usuarioRepository;
+
+    public AsistenciaService(AsistenciaRepository asistenciaRepository, UsuarioRepository usuarioRepository) {
+        this.asistenciaRepository = asistenciaRepository;
+        this.usuarioRepository = usuarioRepository;
+    }
+
+    public List<Asistencia> listarTodas() {
+        return asistenciaRepository.findAll();
+    }
+
+    public Asistencia marcarEntrada(Long usuarioId, String metodo) {
+        LocalDate hoy = LocalDate.now(ZONA_PERU);
+        return asistenciaRepository.findByUsuarioIdAndFecha(usuarioId, hoy)
+                .orElseGet(() -> {
+                    Usuario usuario = usuarioRepository.findById(usuarioId)
+                            .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado."));
+                    Asistencia nueva = new Asistencia();
+                    nueva.setUsuario(usuario);
+                    nueva.setFecha(hoy);
+                    nueva.setHoraEntrada(LocalTime.now(ZONA_PERU));
+                    nueva.setMetodo(metodo);
+                    return asistenciaRepository.save(nueva);
+                });
+    }
+
+    public Asistencia marcarSalida(Long usuarioId) {
+        LocalDate hoy = LocalDate.now(ZONA_PERU);
+        Asistencia registro = asistenciaRepository.findByUsuarioIdAndFecha(usuarioId, hoy)
+                .orElseThrow(() -> new NoSuchElementException("Aún no marcaste tu entrada hoy."));
+        if (registro.getHoraSalida() == null) {
+            LocalDateTime salidaProgramada = LocalDateTime.of(registro.getFecha(), registro.getHoraEntrada())
+                    .plusHours(DURACION_ASISTENCIA_HORAS);
+            if (LocalDateTime.now(ZONA_PERU).isBefore(salidaProgramada)) {
+                throw new IllegalStateException("La salida se registrará automáticamente al cumplir cuatro horas.");
+            }
+            registro.setHoraSalida(salidaProgramada.toLocalTime());
+            asistenciaRepository.save(registro);
+        }
+        return registro;
+    }
+
+    @Scheduled(fixedDelay = 30_000)
+    public void marcarSalidasVencidas() {
+        LocalDateTime ahora = LocalDateTime.now(ZONA_PERU);
+        asistenciaRepository.findAllByHoraSalidaIsNull().stream()
+                .filter(registro -> registro.getFecha() != null && registro.getHoraEntrada() != null)
+                .filter(registro -> !LocalDateTime.of(registro.getFecha(), registro.getHoraEntrada())
+                        .plusHours(DURACION_ASISTENCIA_HORAS).isAfter(ahora))
+                .forEach(registro -> {
+                    registro.setHoraSalida(registro.getHoraEntrada().plusHours(DURACION_ASISTENCIA_HORAS));
+                    asistenciaRepository.save(registro);
+                });
+    }
+}
