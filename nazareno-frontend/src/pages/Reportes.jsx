@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { ClipboardList, ClipboardCheck, Timer, Hourglass, RefreshCw, Download, FileText, CheckCircle2, XCircle, Clock, FileCheck } from 'lucide-react'
 import { useMembers } from '../context/MembersContext'
 import { useAttendance } from '../context/AttendanceContext'
-import { mockSchedule } from '../data/mockSchedule'
 import { AREAS } from '../data/mockMembers'
 import { ROLES } from '../constants/roles'
 import { formatFecha, formatFullDate, firstOfMonthISO } from '../utils/dates'
@@ -31,7 +30,7 @@ export default function Reportes() {
 
   const handleGenerar = () => {
     if (tab !== 'asistencias') return
-    const rows = buildAttendanceReport({ members, schedule: mockSchedule, records, desde, hasta, areaFilter, horarioFilter })
+    const rows = buildAttendanceReport({ members, records, desde, hasta, areaFilter, horarioFilter })
     setReportRows(rows)
     setGeneratedAt(new Date())
   }
@@ -40,10 +39,10 @@ export default function Reportes() {
     (acc, r) => ({ pres: acc.pres + r.pres, aus: acc.aus + r.aus, tard: acc.tard + r.tard, perm: acc.perm + r.perm, total: acc.total + r.total }),
     { pres: 0, aus: 0, tard: 0, perm: 0, total: 0 }
   )
-  const asistenciaPromedio = totals?.total > 0 ? Math.round(((totals.pres + totals.tard) / totals.total) * 100) : 0
+  const asistenciaPromedio = totals?.total > 0 ? Math.round((totals.pres / totals.total) * 100) : 0
 
   const handleExportExcel = () => {
-    const headers = ['Apellidos y Nombres', 'DNI', 'Cargo', 'Área', 'Presentes', 'Ausentes', 'Tardanzas', 'Permisos', 'Total', '% Asistencia']
+    const headers = ['Apellidos y Nombres', 'DNI', 'Cargo', 'Área', 'Presentes', 'Ausentes', 'Tardanzas (min)', 'Permisos', 'Total de marcajes', '% Asistencia']
     const rows = reportRows.map((r) => [
       `${r.member.apellido}, ${r.member.nombre}`, r.member.dni, ROLES[r.member.rol].label, r.member.area,
       r.pres, r.aus, r.tard, r.perm, r.total, r.pctAsist === null ? '' : `${r.pctAsist}%`,
@@ -135,7 +134,7 @@ export default function Reportes() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
               <SummaryCard icon={CheckCircle2} value={totals.pres} label="Presentes" bg="bg-green-50" text="text-green-700" />
               <SummaryCard icon={XCircle} value={totals.aus} label="Ausentes" bg="bg-red-50" text="text-red-600" />
-              <SummaryCard icon={Clock} value={totals.tard} label="Tardanzas" bg="bg-amber-50" text="text-amber-600" />
+              <SummaryCard icon={Clock} value={`${totals.tard} min`} label="Tardanzas acumuladas" bg="bg-amber-50" text="text-amber-600" />
               <SummaryCard icon={FileCheck} value={totals.perm} label="Permisos" bg="bg-blue-50" text="text-blue-600" />
             </div>
 
@@ -148,9 +147,9 @@ export default function Reportes() {
                     <th className="px-5 py-3 font-medium">Área</th>
                     <th className="px-5 py-3 font-medium">Pres.</th>
                     <th className="px-5 py-3 font-medium">Aus.</th>
-                    <th className="px-5 py-3 font-medium">Tard.</th>
+                    <th className="px-5 py-3 font-medium">Tard. (min)</th>
                     <th className="px-5 py-3 font-medium">Perm.</th>
-                    <th className="px-5 py-3 font-medium">Total</th>
+                    <th className="px-5 py-3 font-medium">Marcajes</th>
                     <th className="px-5 py-3 font-medium">% Asist.</th>
                   </tr>
                 </thead>
@@ -164,7 +163,7 @@ export default function Reportes() {
                       <td className="px-5 py-3 text-gray-500">{r.member.area}</td>
                       <td className="px-5 py-3 text-green-700 font-semibold">{r.pres}</td>
                       <td className="px-5 py-3 text-red-600 font-semibold">{r.aus}</td>
-                      <td className="px-5 py-3 text-amber-600 font-semibold">{r.tard}</td>
+                      <td className="px-5 py-3 text-amber-600 font-semibold">{r.tard} min</td>
                       <td className="px-5 py-3 text-blue-600 font-semibold">{r.perm}</td>
                       <td className="px-5 py-3 font-semibold text-gray-800">{r.total}</td>
                       <td className="px-5 py-3 font-bold text-gray-900">{r.pctAsist === null ? '—' : `${r.pctAsist}%`}</td>
@@ -197,7 +196,7 @@ export default function Reportes() {
           <div className="grid grid-cols-4 gap-3 mb-3">
             <SummaryCard icon={CheckCircle2} value={totals.pres} label="Presentes" bg="bg-green-50" text="text-green-700" />
             <SummaryCard icon={XCircle} value={totals.aus} label="Ausentes" bg="bg-red-50" text="text-red-600" />
-            <SummaryCard icon={Clock} value={totals.tard} label="Tardanzas" bg="bg-amber-50" text="text-amber-600" />
+            <SummaryCard icon={Clock} value={`${totals.tard} min`} label="Tardanzas acumuladas" bg="bg-amber-50" text="text-amber-600" />
             <SummaryCard icon={FileCheck} value={totals.perm} label="Permisos" bg="bg-blue-50" text="text-blue-600" />
           </div>
           <p className="text-xs text-gray-500 mb-5">
@@ -215,9 +214,9 @@ export default function Reportes() {
                 <th className="p-2">Área</th>
                 <th className="p-2">Pres.</th>
                 <th className="p-2">Aus.</th>
-                <th className="p-2">Tard.</th>
+                <th className="p-2">Tard. (min)</th>
                 <th className="p-2">Perm.</th>
-                <th className="p-2">Total</th>
+                <th className="p-2">Marcajes</th>
                 <th className="p-2">% Asist.</th>
               </tr>
             </thead>
@@ -231,7 +230,7 @@ export default function Reportes() {
                   <td className="p-2">{r.member.area}</td>
                   <td className="p-2">{r.pres}</td>
                   <td className="p-2">{r.aus}</td>
-                  <td className="p-2">{r.tard}</td>
+                  <td className="p-2">{r.tard} min</td>
                   <td className="p-2">{r.perm}</td>
                   <td className="p-2 font-semibold">{r.total}</td>
                   <td className="p-2 font-bold">{r.pctAsist === null ? '—' : `${r.pctAsist}%`}</td>

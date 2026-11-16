@@ -1,64 +1,37 @@
-function toMinutes(hhmm) {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
+const HORA_LIMITE_MINUTOS = 9 * 60
+
+function toMinutes(hora) {
+  const [hours, minutes] = hora.split(':').map(Number)
+  return hours * 60 + minutes
 }
 
-function toISO(date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-const DIA_BY_JS_DAY = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB']
-
-function eachDateInRange(desdeISO, hastaISO) {
-  const dates = []
-  const current = new Date(`${desdeISO}T00:00:00`)
-  const end = new Date(`${hastaISO}T00:00:00`)
-  while (current <= end) {
-    dates.push(new Date(current))
-    current.setDate(current.getDate() + 1)
-  }
-  return dates
-}
-
-function matchesHorario(entry, horarioFilter) {
+function matchesHorario(record, horarioFilter) {
   if (horarioFilter === 'TODOS') return true
-  const turno = toMinutes(entry.horaInicio) < toMinutes('13:00') ? 'MANANA' : 'TARDE'
+  const turno = toMinutes(record.horaEntrada) < 13 * 60 ? 'MANANA' : 'TARDE'
   return turno === horarioFilter
 }
 
-const GRACE_MINUTES = 10 // tolerancia antes de contar como tardanza
-
-// Usa el horario semanal como "días esperados", desde la fecha de ingreso.
-// Los días sin marca cuentan como asistencia; las marcas tardías se conservan.
-export function buildAttendanceReport({ members, schedule, records, desde, hasta, areaFilter, horarioFilter }) {
-  const filteredMembers = members.filter((m) => areaFilter === 'TODAS' || m.area === areaFilter)
+// El reporte refleja únicamente marcajes reales registrados dentro del período.
+export function buildAttendanceReport({ members, records, desde, hasta, areaFilter, horarioFilter }) {
+  const filteredMembers = members.filter((member) => areaFilter === 'TODAS' || member.area === areaFilter)
 
   return filteredMembers.map((member) => {
-    const memberSchedule = schedule.filter((s) => s.codigo === member.codigo && matchesHorario(s, horarioFilter))
-    let pres = 0, aus = 0, tard = 0
-    const perm = 0 // sin módulo de permisos todavía — placeholder para cuando exista
-    const fechaInicio = member.fechaIngreso && member.fechaIngreso > desde ? member.fechaIngreso : desde
-    const dateRange = eachDateInRange(fechaInicio, hasta)
+    const memberRecords = records.filter((record) =>
+      record.memberId === member.id &&
+      record.fecha >= desde &&
+      record.fecha <= hasta &&
+      matchesHorario(record, horarioFilter)
+    )
+    const pres = memberRecords.length
+    const tard = memberRecords.reduce(
+      (minutes, record) => minutes + Math.max(0, toMinutes(record.horaEntrada) - HORA_LIMITE_MINUTOS),
+      0
+    )
+    const aus = 0
+    const perm = 0
+    const total = pres + aus + perm
+    const pctAsist = total > 0 ? Math.round((pres / total) * 100) : null
 
-    dateRange.forEach((date) => {
-      const scheduled = memberSchedule.find((s) => s.dia === DIA_BY_JS_DAY[date.getDay()])
-      if (!scheduled) return // no era un día esperado para este miembro, no cuenta en el total
-
-      const record = records.find((r) => r.memberId === member.id && r.fecha === toISO(date))
-      if (!record) {
-        pres++
-      } else if (toMinutes(record.horaEntrada) > toMinutes(scheduled.horaInicio) + GRACE_MINUTES) {
-        tard++
-      } else {
-        pres++
-      }
-    })
-
-    const total = pres + aus + tard + perm
-    const pctAsist = total > 0 ? Math.round(((pres + tard) / total) * 100) : null
     return { member, pres, aus, tard, perm, total, pctAsist }
   })
 }
