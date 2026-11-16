@@ -32,17 +32,7 @@ export default function Reportes() {
   const handleGenerar = () => {
     if (tab !== 'asistencias') return
     const rows = buildAttendanceReport({ members, schedule: mockSchedule, records, desde, hasta, areaFilter, horarioFilter })
-
-    const rowsModificadas = rows.map(r => ({
-      ...r,
-      pres: r.total,   // Todos los días del total son presentes
-      aus: 0,          // 0 ausencias
-      tard: 0,         // 0 tardanzas
-      perm: 0,         // 0 permisos
-      pctAsist: 100    // 100% de asistencia
-    }))
-
-    setReportRows(rowsModificadas)
+    setReportRows(rows)
     setGeneratedAt(new Date())
   }
 
@@ -50,7 +40,7 @@ export default function Reportes() {
     (acc, r) => ({ pres: acc.pres + r.pres, aus: acc.aus + r.aus, tard: acc.tard + r.tard, perm: acc.perm + r.perm, total: acc.total + r.total }),
     { pres: 0, aus: 0, tard: 0, perm: 0, total: 0 }
   )
-  const asistenciaPromedio = totals?.total > 0 ? Math.round((totals.pres / totals.total) * 100) : 0
+  const asistenciaPromedio = totals?.total > 0 ? Math.round(((totals.pres + totals.tard) / totals.total) * 100) : 0
 
   const handleExportExcel = () => {
     const headers = ['Apellidos y Nombres', 'DNI', 'Cargo', 'Área', 'Presentes', 'Ausentes', 'Tardanzas', 'Permisos', 'Total', '% Asistencia']

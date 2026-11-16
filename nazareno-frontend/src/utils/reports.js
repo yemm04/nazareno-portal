@@ -31,17 +31,17 @@ function matchesHorario(entry, horarioFilter) {
 
 const GRACE_MINUTES = 10 // tolerancia antes de contar como tardanza
 
-// Usa el horario semanal de mockSchedule (el mismo del Calendario) como
-// "días esperados" por miembro, y las marcas reales de AttendanceContext
-// para saber si llegó, llegó tarde, o faltó.
+// Usa el horario semanal como "días esperados", desde la fecha de ingreso.
+// Los días sin marca cuentan como asistencia; las marcas tardías se conservan.
 export function buildAttendanceReport({ members, schedule, records, desde, hasta, areaFilter, horarioFilter }) {
-  const dateRange = eachDateInRange(desde, hasta)
   const filteredMembers = members.filter((m) => areaFilter === 'TODAS' || m.area === areaFilter)
 
   return filteredMembers.map((member) => {
     const memberSchedule = schedule.filter((s) => s.codigo === member.codigo && matchesHorario(s, horarioFilter))
     let pres = 0, aus = 0, tard = 0
     const perm = 0 // sin módulo de permisos todavía — placeholder para cuando exista
+    const fechaInicio = member.fechaIngreso && member.fechaIngreso > desde ? member.fechaIngreso : desde
+    const dateRange = eachDateInRange(fechaInicio, hasta)
 
     dateRange.forEach((date) => {
       const scheduled = memberSchedule.find((s) => s.dia === DIA_BY_JS_DAY[date.getDay()])
@@ -49,7 +49,7 @@ export function buildAttendanceReport({ members, schedule, records, desde, hasta
 
       const record = records.find((r) => r.memberId === member.id && r.fecha === toISO(date))
       if (!record) {
-        aus++
+        pres++
       } else if (toMinutes(record.horaEntrada) > toMinutes(scheduled.horaInicio) + GRACE_MINUTES) {
         tard++
       } else {
@@ -58,7 +58,7 @@ export function buildAttendanceReport({ members, schedule, records, desde, hasta
     })
 
     const total = pres + aus + tard + perm
-    const pctAsist = total > 0 ? Math.round((pres / total) * 100) : null
+    const pctAsist = total > 0 ? Math.round(((pres + tard) / total) * 100) : null
     return { member, pres, aus, tard, perm, total, pctAsist }
   })
 }
